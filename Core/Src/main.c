@@ -36,7 +36,6 @@
 /* USER CODE BEGIN PD */
 // CANIDの定義
 #define CAN_ID_FEEDBACK 0x103 // グローバル座標と回転角の送信
-#define CAN_ID_SET_ODOM 0x105 // グローバル座標セットアップ命令の受信
 
 #define M_PI 3.14159265358979323846 //math.hから除外されたとき用
 /* USER CODE END PD */
@@ -48,10 +47,8 @@
 #define CONV M_PI / 180.0f // 度/秒 を ラジアン/秒 に変換する時に掛ける
 #define PPR 2000.0 //pulses per revolution
 
-// 車体中心から各計測輪までの距離
-#define L_1 249.15 //[mm]
-#define L_2 192.45 //[mm]
-#define L_3 225.85 //[mm]
+// 機体の機構パラメータ (実測値をmm単位等で設定)
+const float L = 150.0f; // ロボットの中心線（真ん中の縦軸）から、縦向きホイールがどれだけズレているか
 
 #define AVG_WINDOW_SIZE 25
 /* USER CODE END PM */
@@ -108,13 +105,6 @@ volatile double deg1 = 0.0f; //[rad]
 volatile double deg2 = 0.0f; //[rad]
 volatile double deg3 = 0.0f; //[rad]
 
-// グローバル座標系での位置
-volatile double x = 0.0f; //[m]
-volatile double y = 0.0f; //[m]
-volatile double w = 0.0f; //[rad]
-
-volatile double w_offset = 0.0f; // ヨー角のオフセット
-
 // ロボット自身から見た（ローカル座標系における）現在速度。
 volatile double dxl; // 前後方向の移動速度
 volatile double dyl; // 左右方向の移動速度
@@ -162,9 +152,6 @@ void MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, flo
 void getEulerAngles();
 void resetBias();
 void resetWheel();
-void setX(double target_x);
-void setY(double target_y);
-void setW(double target_w);
 
 typedef struct {
     float buffer[AVG_WINDOW_SIZE]; // 静的に確保
@@ -176,7 +163,6 @@ typedef struct {
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-volatile float q[4] = {1.0f, 0.0f, 0.0f, 0.0f}; // ロボットの現在の姿勢（3次元の傾きと向き）を表すクォータニオン（四元数）を保持する配列
 static MovingAvgData avg_x, avg_y, avg_theta;
 TIM_TypeDef* const TIM[4] = {TIM2, TIM8, TIM1}; // エンコーダ入力として使用している4つのタイマー（TIM）のハードウェアレジスタアドレスをまとめたポインタ配列
 
@@ -229,33 +215,11 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
 		}
     switch (RxHeader.Identifier)
     {
-      /*
-      CAN ID: 0x105 (CAN_ID_SET_ODOM とする)
-      DLC (データ長): 8バイト
-      データの構造:
-      Data[0] (1バイト): 変更したい軸の指定 (0 = X, 1 = Y, 2 = W)
-      Data[1]〜[4] (4バイト): 変更したい数値 (float型の target_x など)
-      */
-      case CAN_ID_SET_ODOM:
-        float target_val;
-        // 受信データの[1]〜[4]バイト目をfloatに変換
-        u8_to_float(&RxData[1], &target_val, 4);
-
-        if (RxData[0] == 0) {
-          // X座標の更新
-          setX(target_val);
-        } 
-        else if (RxData[0] == 1) {
-          // Y座標の更新
-          setY(target_val);
-        } 
-        else if (RxData[0] == 2) {
-          // 角度(W)の更新
-          setW(target_val);
-        }
+      case CAN_ID_MACRO_kaetekudasai: // change this value for testing. Reccommend to use an ID with privateDefined macro
+        /* code */
         break;
-
       default:
+        // printf("unknown CAN ID received: 0x%03lX\r\n", RxHeader.Identifier); // printf should be commented out within Callback
         break;
     }
   }
@@ -289,50 +253,34 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
         if (fabs(gyro_x) < 0.5) gyro_x = 0.0;
         if (fabs(gyro_y) < 0.5) gyro_y = 0.0;
         if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
-
-        MadgwickAHRSupdateIMU(gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z, dt);
-        getEulerAngles(); //デバッグ用: クォータニオンをオイラー角に変換
     }
 
     if (isSettingWheel == 0) { // 計測輪有効のとき
-        // ここの+-がわからない(8/11)
-        value[0] = (float)read_encoder_value(1);
-        value[1] = (float)read_encoder_value(2);
-        value[2] = (float)read_encoder_value(3);
+        value[0] = read_encoder_value(1);
+        value[1] = read_encoder_value(2);
+        value[2] = read_encoder_value(3);
 
         sum_value[0] += value[0];
         sum_value[1] += value[1];
         sum_value[2] += value[2];
     
-        deg1 = ((value[0] / PPR) * 2 * M_PI) / dt; //各計測輪の角速度
-        deg2 = ((value[1] / PPR) * 2 * M_PI) / dt;
-        deg3 = ((value[2] / PPR) * 2 * M_PI) / dt;
+        deg1 = (((float)value[0] / PPR) * 2 * M_PI) / dt; //各計測輪の角速度
+        deg2 = (((float)value[1] / PPR) * 2 * M_PI) / dt;
+        deg3 = (((float)value[2] / PPR) * 2 * M_PI) / dt;
 
-        dxl = ( deg1 + deg2 + deg3) * (R / (4.0f * invSqrt(2.0f)));
-        dyl = (-deg1 + deg2 + deg3) * (R / (4.0f * invSqrt(2.0f)));
+        // // こっちが正しいかも
+        // deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+        // deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+        // deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+
+        dwl = gyro_z * CONV;
+        dxl = (deg1 - deg2) * R / 2.0f;
+        dyl = deg3 * R - (L * dwl); // Y輪の回転干渉をキャンセル
         
-        // ここの算出仮置き。不完全
-        float l_avg = (L_1 + L_2 + L_3) / 4.0f;
-        dwl = (-deg1 + deg2 - deg3) * (R / (4.0f * l_avg));
-
         // 移動平均を計算（計算負荷は非常に低い）
         filtered_vx = update_ma_isr(&avg_x, dxl) * 0.001f; //mに変換 
         filtered_vy = update_ma_isr(&avg_y, dyl) * 0.001f; //mに変換
         filtered_theta = update_ma_isr(&avg_theta, dwl);
-
-        // IMUのクォータニオン計算がまだ不安定なタイミングでは、ジャイロやエンコーダの旋回角速度（filtered_theta）を積分（+ filtered_theta * dt）する予備ロジックへ切り替える工夫
-        if (isSettingBias == 0) {
-          // // クォータニオン(q)からYaw角(w)を直接算出し直す
-          // w = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
-          float raw_w = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
-          w = raw_w - w_offset; // オフセット分を引いたものを現在の角度とする
-        }else{
-          // バイアス設定中（静止校正時など）ジャイロ/エンコーダの旋回速度を積分して追従する
-          w += filtered_theta * dt;
-        }
-        // ロボット基準の移動速度（前進 vx, 横移動 vy）」を「フィールド固定の座標系（X, Y）」に回転変換して、位置を積算
-        x += (filtered_vx * cos(w) - filtered_vy * sin(w)) * dt;
-        y += (filtered_vx * sin(w) + filtered_vy * cos(w)) * dt;
     }
     flag_1ms_update = 1; // 1msが経過し無事割り込み処理ができたことを通知
   }
@@ -393,7 +341,6 @@ int main(void)
   HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim8, TIM_CHANNEL_ALL);
-  HAL_TIM_Encoder_Start(&htim8, TIM_CHANNEL_ALL);
 
   // IMUの初期化
   INIT_IMU(1);
@@ -416,10 +363,10 @@ int main(void)
     if (flag_1ms_update == 1){
       flag_1ms_update = 0;
 
-      float txdata_f[3] = {x, y, w};
-      uint8_t txdata_u8[12] = {0};
-      float_to_u8(txdata_f, txdata_u8, 3);
-      CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_12, txdata_u8, &hfdcan1, &TxHeader);
+      float txdata_f[3] = {filtered_vx, filtered_vy, filtered_theta};
+      uint8_t txdata2_u8[12] = {0};
+      float_to_u8(txdata_f, txdata2_u8, 3);
+      CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_12, txdata2_u8, &hfdcan1, &TxHeader);
 
       //以下デバッグ用
       print_counter++;
@@ -427,12 +374,10 @@ int main(void)
         print_counter = 0; // カウンタをリセット
         printf(">"); //シリアルプロッタ表示
         //IMU
-        printf("1:%d,2:%d,3:%d\r\n",whoami,whoami2,whoami3);
+        // printf("1:%d,2:%d,3:%d\r\n",whoami,whoami2,whoami3);
         printf("gyro_x:%d,gyro_y:%d,gyro_z:%d,\r\n",(int)gyro_x,(int)gyro_y,(int)gyro_z);
         printf("accel_x:%d,accel_y:%d,accel_z:%d,",(int)accel_x,(int)accel_y,(int)accel_z);
-        // printf("%.4f,%.4f,%.4f,%.4f\r\n", -q[0], q[1], q[2], q[3]); //unity表示
         printf("yaw:%.2f,pitch:%.2f,roll:%.2f\r\n",yaw,pitch,roll);
-        // printf("vx:%.4f,vy:%.4f,",vx, vy);
     
         //計測輪
         printf("%d",isSettingWheel);
@@ -440,7 +385,6 @@ int main(void)
         printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
         printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
         printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_theta);
-        printf("x:%.4f,y:%.4f,w:%.4f,",x,y,w);
     
         printf("\r\n"); //シリアルプロッタ表示
       }
@@ -1010,58 +954,6 @@ float invSqrt(float x){
   return 1.0f / sqrtf(x);
 }
 
-// クウォータニオンの更新処理
-void MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az, float dt){
-  float recipNorm;
-  float s0, s1, s2, s3;
-  float qDot1, qDot2, qDot3, qDot4;
-  float _2q0, _2q1, _2q2, _2q3, _4q0, _4q1, _4q2, _8q1, _8q2, q0q0, q1q1, q2q2, q3q3;
-
-  // 度/秒 を ラジアン/秒 に変換
-  gx *= CONV;
-  gy *= CONV;
-  gz *= CONV;
-
-  // ジャイロによるクォータニオンの変化率
-  qDot1 = 0.5f * (-q[1] * gx - q[2] * gy - q[3] * gz);
-  qDot2 = 0.5f * (q[0] * gx + q[2] * gz - q[3] * gy);
-  qDot3 = 0.5f * (q[0] * gy - q[1] * gz + q[3] * gx);
-  qDot4 = 0.5f * (q[0] * gz + q[1] * gy - q[2] * gx);
-
-  // 加速度が有効な場合のみ補正計算を行う
-  if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
-    recipNorm = invSqrt(ax * ax + ay * ay + az * az);
-    ax *= recipNorm; ay *= recipNorm; az *= recipNorm;
-
-    // 勾配降下法の計算
-    _2q0 = 2.0f * q[0]; _2q1 = 2.0f * q[1]; _2q2 = 2.0f * q[2]; _2q3 = 2.0f * q[3];
-    _4q0 = 4.0f * q[0]; _4q1 = 4.0f * q[1]; _4q2 = 4.0f * q[2];
-    _8q1 = 8.0f * q[1]; _8q2 = 8.0f * q[2];
-    q0q0 = q[0] * q[0]; q1q1 = q[1] * q[1]; q2q2 = q[2] * q[2]; q3q3 = q[3] * q[3];
-
-    s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
-    s1 = _4q1 * q3q3 - _2q3 * ax + 4.0f * q0q0 * q[1] - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
-    s2 = 4.0f * q0q0 * q[2] + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
-    s3 = 4.0f * q1q1 * q[3] - _2q1 * ax + 4.0f * q2q2 * q[3] - _2q2 * ay;
-
-    recipNorm = invSqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
-    s0 *= recipNorm; s1 *= recipNorm; s2 *= recipNorm; s3 *= recipNorm;
-
-    qDot1 -= beta * s0; qDot2 -= beta * s1; qDot3 -= beta * s2; qDot4 -= beta * s3;
-  }
-
-  // 積分してクォータニオンを更新
-  q[0] += qDot1 * dt; q[1] += qDot2 * dt; q[2] += qDot3 * dt; q[3] += qDot4 * dt;
-  recipNorm = invSqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
-  q[0] *= recipNorm; q[1] *= recipNorm; q[2] *= recipNorm; q[3] *= recipNorm;
-}
-
-void getEulerAngles(){
-  roll  = atan2f(2.0f * (q[0] * q[1] + q[2] * q[3]), 1.0f - 2.0f * (q[1] * q[1] + q[2] * q[2])) * 57.29578f;
-  pitch = asinf(2.0f * (q[0] * q[2] - q[3] * q[1])) * 57.29578f;
-  yaw   = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3])) * 57.29578f;
-}
-
 void resetBias(){
   // 起動時に1000回計測して平均をとる
   isSettingBias = 1;
@@ -1098,35 +990,9 @@ void resetWheel(){
   init_averages(&avg_x);
   init_averages(&avg_y);
   init_averages(&avg_theta);
-  x = 0.0f;
-  y = 0.0f;
-  w = 0.0f;
   sum_value[0] = 0;
   sum_value[1] = 0;
   sum_value[2] = 0;
-  sum_value[3] = 0;
-  isSettingWheel = 0;
-}
-
-// 上位基板から「X座標だけ」を補正する時に呼ぶ
-void setX(double target_x){
-  isSettingWheel = 1;
-  x = target_x;
-  isSettingWheel = 0;
-}
-
-// 上位基板から「Y座標だけ」を補正する時に呼ぶ
-void setY(double target_y){
-  isSettingWheel = 1;
-  y = target_y;
-  isSettingWheel = 0;
-}
-
-// 上位基板から「角度(Yaw)だけ」を補正する時に呼ぶ
-void setW(double target_w){
-  isSettingWheel = 1;
-  float raw_w = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
-  w_offset = raw_w - target_w; 
   isSettingWheel = 0;
 }
 
