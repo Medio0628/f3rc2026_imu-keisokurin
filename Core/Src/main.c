@@ -162,6 +162,9 @@ void MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, flo
 void getEulerAngles();
 void resetBias();
 void resetWheel();
+void setX(double target_x);
+void setY(double target_y);
+void setW(double target_w);
 
 typedef struct {
     float buffer[AVG_WINDOW_SIZE]; // 静的に確保
