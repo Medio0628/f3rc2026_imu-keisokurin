@@ -113,7 +113,8 @@ volatile double dwl; // 旋回（回転）角速度
 // ノイズ除去（移動平均フィルタ）を適用した後の、ロボットの移動速度および旋回速度を保持する変数群
 volatile double filtered_vx; // 移動平均フィルタ処理後の X軸方向（前後方向）の移動速度
 volatile double filtered_vy; // 移動平均フィルタ処理後の Y軸方向（左右方向）の移動速度
-volatile double filtered_theta; // 移動平均フィルタ処理後の 旋回（回転）角速度
+volatile double filtered_omega; // 移動平均フィルタ処理後の 旋回（回転）角速度
+volatile double theta;
 
 //共通の変数
 float dt = 0.001f; // 制御・積分計算のサンプリング周期
@@ -163,7 +164,7 @@ typedef struct {
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-static MovingAvgData avg_x, avg_y, avg_theta;
+static MovingAvgData avg_x, avg_y, avg_omega;
 TIM_TypeDef* const TIM[4] = {TIM2, TIM8, TIM1}; // エンコーダ入力として使用している4つのタイマー（TIM）のハードウェアレジスタアドレスをまとめたポインタ配列
 
 int16_t read_encoder_value(int port)
@@ -215,9 +216,6 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
 		}
     switch (RxHeader.Identifier)
     {
-      case CAN_ID_MACRO_kaetekudasai: // change this value for testing. Reccommend to use an ID with privateDefined macro
-        /* code */
-        break;
       default:
         // printf("unknown CAN ID received: 0x%03lX\r\n", RxHeader.Identifier); // printf should be commented out within Callback
         break;
@@ -264,23 +262,27 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
         sum_value[1] += value[1];
         sum_value[2] += value[2];
     
-        deg1 = (((float)value[0] / PPR) * 2 * M_PI) / dt; //各計測輪の角速度
-        deg2 = (((float)value[1] / PPR) * 2 * M_PI) / dt;
-        deg3 = (((float)value[2] / PPR) * 2 * M_PI) / dt;
+        // // こっちが間違ってる理由がまだ飲み込めてない
+        // deg1 = (((float)value[0] / PPR) * 2 * M_PI) / dt; //各計測輪の角速度
+        // deg2 = (((float)value[1] / PPR) * 2 * M_PI) / dt;
+        // deg3 = (((float)value[2] / PPR) * 2 * M_PI) / dt;
 
-        // // こっちが正しいかも
-        // deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-        // deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-        // deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+        // こっちが正しい
+        deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+        deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+        deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
 
         dwl = gyro_z * CONV;
         dxl = (deg1 - deg2) * R / 2.0f;
         dyl = deg3 * R - (L * dwl); // Y輪の回転干渉をキャンセル
         
         // 移動平均を計算（計算負荷は非常に低い）
-        filtered_vx = update_ma_isr(&avg_x, dxl) * 0.001f; //mに変換 
-        filtered_vy = update_ma_isr(&avg_y, dyl) * 0.001f; //mに変換
-        filtered_theta = update_ma_isr(&avg_theta, dwl);
+        filtered_vx = update_ma_isr(&avg_x, dxl);
+        filtered_vy = update_ma_isr(&avg_y, dyl);
+        filtered_omega = update_ma_isr(&avg_omega, dwl);
+
+        // 角度の積分計算
+        theta += filtered_omega * dt;
     }
     flag_1ms_update = 1; // 1msが経過し無事割り込み処理ができたことを通知
   }
@@ -363,10 +365,10 @@ int main(void)
     if (flag_1ms_update == 1){
       flag_1ms_update = 0;
 
-      float txdata_f[3] = {filtered_vx, filtered_vy, filtered_theta};
-      uint8_t txdata2_u8[12] = {0};
-      float_to_u8(txdata_f, txdata2_u8, 3);
-      CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_12, txdata2_u8, &hfdcan1, &TxHeader);
+      float txdata_f[4] = {filtered_vx, filtered_vy, filtered_omega, theta};
+      uint8_t txdata2_u8[16] = {0};
+      float_to_u8(txdata_f, txdata2_u8, 4);
+      CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_16, txdata2_u8, &hfdcan1, &TxHeader);
 
       //以下デバッグ用
       print_counter++;
@@ -384,7 +386,7 @@ int main(void)
         printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
         printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
         printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
-        printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_theta);
+        printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
     
         printf("\r\n"); //シリアルプロッタ表示
       }
@@ -989,7 +991,8 @@ void resetWheel(){
   isSettingWheel = 1;
   init_averages(&avg_x);
   init_averages(&avg_y);
-  init_averages(&avg_theta);
+  init_averages(&avg_omega);
+  theta = 0.0;
   sum_value[0] = 0;
   sum_value[1] = 0;
   sum_value[2] = 0;
