@@ -48,7 +48,7 @@
 #define PPR 2000.0 //pulses per revolution
 
 // 機体の機構パラメータ (実測値をmm単位等で設定)
-const float L = 150.0f; // ロボットの中心線（真ん中の縦軸）から、縦向きホイールがどれだけズレているか
+const float L = 69.764f; // ロボットの中心線（真ん中の縦軸）から、縦向きホイールがどれだけズレているか
 
 #define AVG_WINDOW_SIZE 25
 /* USER CODE END PM */
