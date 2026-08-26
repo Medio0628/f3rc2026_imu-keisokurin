@@ -377,9 +377,10 @@ int main(void)
         printf(">"); //シリアルプロッタ表示
         //IMU
         // printf("1:%d,2:%d,3:%d\r\n",whoami,whoami2,whoami3);
-        printf("gyro_x:%d,gyro_y:%d,gyro_z:%d,\r\n",(int)gyro_x,(int)gyro_y,(int)gyro_z);
-        printf("accel_x:%d,accel_y:%d,accel_z:%d,",(int)accel_x,(int)accel_y,(int)accel_z);
-        printf("yaw:%.2f,pitch:%.2f,roll:%.2f\r\n",yaw,pitch,roll);
+        // printf("gyro_x:%d,gyro_y:%d,gyro_z:%d,\r\n",(int)gyro_x,(int)gyro_y,(int)gyro_z);
+        // printf("accel_x:%d,accel_y:%d,accel_z:%d,",(int)accel_x,(int)accel_y,(int)accel_z);
+        printf("gyro_x:%lf,gyro_y:%lf,gyro_z:%lf,\r\n",(float)gyro_x,(float)gyro_y,(float)gyro_z);
+        printf("accel_x:%lf,accel_y:%lf,accel_z:%lf,",(float)accel_x,(float)accel_y,(float)accel_z);
     
         // //計測輪
         // printf("%d",isSettingWheel);
