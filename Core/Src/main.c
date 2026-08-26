@@ -379,13 +379,13 @@ int main(void)
         // printf("1:%d,2:%d,3:%d\r\n",whoami,whoami2,whoami3);
         // printf("gyro_x:%d,gyro_y:%d,gyro_z:%d,\r\n",(int)gyro_x,(int)gyro_y,(int)gyro_z);
         // printf("accel_x:%d,accel_y:%d,accel_z:%d,",(int)accel_x,(int)accel_y,(int)accel_z);
-        printf("gyro_x:%lf,gyro_y:%lf,gyro_z:%lf,\r\n",(float)gyro_x,(float)gyro_y,(float)gyro_z);
-        printf("accel_x:%lf,accel_y:%lf,accel_z:%lf,",(float)accel_x,(float)accel_y,(float)accel_z);
+        // printf("gyro_x:%lf,gyro_y:%lf,gyro_z:%lf,\r\n",(float)gyro_x,(float)gyro_y,(float)gyro_z);
+        // printf("accel_x:%lf,accel_y:%lf,accel_z:%lf,",(float)accel_x,(float)accel_y,(float)accel_z);
     
-        // //計測輪
-        // printf("%d",isSettingWheel);
-        // printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
-        // printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
+        //計測輪
+        printf("%d",isSettingWheel);
+        printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
+        printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
         // printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
         // printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
     
