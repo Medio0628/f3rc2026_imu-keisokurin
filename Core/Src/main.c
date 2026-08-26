@@ -165,7 +165,7 @@ typedef struct {
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 static MovingAvgData avg_x, avg_y, avg_omega;
-TIM_TypeDef* const TIM[4] = {TIM2, TIM8, TIM1}; // エンコーダ入力として使用している4つのタイマー（TIM）のハードウェアレジスタアドレスをまとめたポインタ配列
+TIM_TypeDef* const TIM[3] = {TIM2, TIM8, TIM1}; // エンコーダ入力として使用している3つのタイマー（TIM）のハードウェアレジスタアドレスをまとめたポインタ配列
 
 int16_t read_encoder_value(int port)
 {
