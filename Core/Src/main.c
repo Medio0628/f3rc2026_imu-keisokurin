@@ -381,12 +381,12 @@ int main(void)
         printf("accel_x:%d,accel_y:%d,accel_z:%d,",(int)accel_x,(int)accel_y,(int)accel_z);
         printf("yaw:%.2f,pitch:%.2f,roll:%.2f\r\n",yaw,pitch,roll);
     
-        //計測輪
-        printf("%d",isSettingWheel);
-        printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
-        printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
-        printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
-        printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
+        // //計測輪
+        // printf("%d",isSettingWheel);
+        // printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
+        // printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
+        // printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
+        // printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
     
         printf("\r\n"); //シリアルプロッタ表示
       }
