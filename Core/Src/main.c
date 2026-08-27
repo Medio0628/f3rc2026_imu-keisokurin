@@ -959,11 +959,11 @@ void INIT_IMU(int port){
   /*センサの初期化*/
   LSM6_Write(0x12, 0x44,port); // CTRL3: reboot,BDU有効化,アドレス自動インクリメント有効化
   /*ジャイロの初期化*/
-  LSM6_Write(0x15, 0x04,port); // CTRL6: FS=±2000dps
-  LSM6_Write(0x11, 0x10,port); // CTRL2: ODR=1.92kHz
+  LSM6_Write(0x17, 0x03,port); // CTRL6: FS=±2000dps
+  LSM6_Write(0x10, 0x06,port); // CTRL2: ODR=1.92kHz
   /*加速度の初期化*/
-  LSM6_Write(0x17, 0x03,port); // CTRL8: FS=±16g
-  LSM6_Write(0x10, 0x10,port); // CTRL1: ODR=1.92kHz
+  LSM6_Write(0x15, 0x04,port); // CTRL8: FS=±16g
+  LSM6_Write(0x11, 0x06,port); // CTRL1: ODR=1.92kHz
 }
 
 float invSqrt(float x){
