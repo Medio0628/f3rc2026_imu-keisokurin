@@ -256,10 +256,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       accel_y = (float)( imu[1].ax - imu[0].ay*cos_30 - imu[0].ax*sin_30 - imu[2].ax*sin_30 + imu[2].ay*cos_30)*A_sensitivity/3.0f;
       accel_z = (float)( imu[0].az + imu[1].az + imu[2].az )*A_sensitivity/3.0f;
 
-      // 微小なノイズを0とみなす, fabs:絶対値
-      if (fabs(gyro_x) < 0.5) gyro_x = 0.0;
-      if (fabs(gyro_y) < 0.5) gyro_y = 0.0;
-      if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
+      // // 微小なノイズを0とみなす, fabs:絶対値
+      // if (fabs(gyro_x) < 0.5) gyro_x = 0.0;
+      // if (fabs(gyro_y) < 0.5) gyro_y = 0.0;
+      // if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
 
       MadgwickAHRSupdateIMU(gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z, dt);
     }
@@ -363,9 +363,9 @@ int main(void)
   INIT_IMU(2);
   INIT_IMU(3);
 
-  /*whoami = LSM6_Read(0x0F,1);
+  whoami = LSM6_Read(0x0F,1);
   whoami2 = LSM6_Read(0x0F,2);
-  whoami3 = LSM6_Read(0x0F,3);*/
+  whoami3 = LSM6_Read(0x0F,3);
   
   resetBias();
   resetWheel();
@@ -390,16 +390,14 @@ int main(void)
         print_counter = 0; // カウンタをリセット
         printf(">"); //シリアルプロッタ表示
         //IMU
-        // printf("1:%d,2:%d,3:%d\r\n",whoami,whoami2,whoami3);
-        // printf("gyro_x:%d,gyro_y:%d,gyro_z:%d,\r\n",(int)gyro_x,(int)gyro_y,(int)gyro_z);
-        // printf("accel_x:%d,accel_y:%d,accel_z:%d,",(int)accel_x,(int)accel_y,(int)accel_z);
-        // printf("gyro_x:%lf,gyro_y:%lf,gyro_z:%lf,\r\n",(float)gyro_x,(float)gyro_y,(float)gyro_z);
-        // printf("accel_x:%lf,accel_y:%lf,accel_z:%lf,",(float)accel_x,(float)accel_y,(float)accel_z);
+        printf("1:%d,2:%d,3:%d\r\n",whoami,whoami2,whoami3);
+        printf("gyro_x:%d,gyro_y:%d,gyro_z:%d,\r\n",(int)gyro_x,(int)gyro_y,(int)gyro_z);
+        printf("accel_x:%d,accel_y:%d,accel_z:%d,\r\n",(int)accel_x,(int)accel_y,(int)accel_z);
     
         //計測輪
-        printf("%d",isSettingWheel);
-        printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
-        printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
+        // printf("%d",isSettingWheel);
+        // printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
+        // printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
         // printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
         // printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
     
