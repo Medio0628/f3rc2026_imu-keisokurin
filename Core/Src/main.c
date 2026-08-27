@@ -35,7 +35,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 // CANIDの定義
-#define CAN_ID_FEEDBACK 0x103 // グローバル座標と回転角の送信
+#define CAN_ID_FEEDBACK 0x015 // グローバル座標と回転角の送信
 
 #define M_PI 3.14159265358979323846 //math.hから除外されたとき用
 /* USER CODE END PD */
