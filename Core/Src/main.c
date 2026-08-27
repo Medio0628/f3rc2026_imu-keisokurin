@@ -256,10 +256,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       accel_y = (float)( imu[1].ax - imu[0].ay*cos_30 - imu[0].ax*sin_30 - imu[2].ax*sin_30 + imu[2].ay*cos_30)*A_sensitivity/3.0f;
       accel_z = (float)( imu[0].az + imu[1].az + imu[2].az )*A_sensitivity/3.0f;
 
-      // // 微小なノイズを0とみなす, fabs:絶対値
-      // if (fabs(gyro_x) < 0.5) gyro_x = 0.0;
-      // if (fabs(gyro_y) < 0.5) gyro_y = 0.0;
-      // if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
+      // 微小なノイズを0とみなす, fabs:絶対値
+      if (fabs(gyro_x) < 0.5) gyro_x = 0.0;
+      if (fabs(gyro_y) < 0.5) gyro_y = 0.0;
+      if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
 
       MadgwickAHRSupdateIMU(gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z, dt);
     }
@@ -279,8 +279,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
 
       dwl = gyro_z * CONV;
-      dxl = (deg1 - deg2) * R / 2.0f;
-      dyl = deg3 * R - (L * dwl); // Y輪の回転干渉をキャンセル
+      dxl = (deg3 - deg2) * R / 2.0f;
+      dyl = deg1 * R - (L * dwl); // Y輪の回転干渉をキャンセル
         
       // 移動平均を計算（計算負荷は非常に低い）
       filtered_vx = update_ma_isr(&avg_x, dxl);
@@ -390,14 +390,14 @@ int main(void)
         print_counter = 0; // カウンタをリセット
         printf(">"); //シリアルプロッタ表示
         //IMU
-        printf("1:%d,2:%d,3:%d\r\n",whoami,whoami2,whoami3);
-        printf("gyro_x:%d,gyro_y:%d,gyro_z:%d,\r\n",(int)gyro_x,(int)gyro_y,(int)gyro_z);
-        printf("accel_x:%d,accel_y:%d,accel_z:%d,\r\n",(int)accel_x,(int)accel_y,(int)accel_z);
+        // printf("1:%d,2:%d,3:%d\r\n",whoami,whoami2,whoami3);
+        // printf("gyro_x:%d,gyro_y:%d,gyro_z:%d,\r\n",(int)gyro_x,(int)gyro_y,(int)gyro_z);
+        // printf("accel_x:%d,accel_y:%d,accel_z:%d,\r\n",(int)accel_x,(int)accel_y,(int)accel_z);
     
         //計測輪
         // printf("%d",isSettingWheel);
-        // printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
-        // printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
+        printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
+        printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
         // printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
         // printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
     
