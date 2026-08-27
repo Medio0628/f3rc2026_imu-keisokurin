@@ -296,7 +296,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       theta_global = theta_local + START_THETA;
 
       x += (filtered_vx * cosf(theta_global) - filtered_vy * sinf(theta_global)) * dt;
-      y += (filtered_vx * sinf(theta_global) + filtered_vy * cosf(theta_global)) * dt;
+      y += (filtered_vx * sinf(theta_global) - filtered_vy * cosf(theta_global)) * dt;
     }
     flag_1ms_update = 1; // 1msが経過し無事割り込み処理ができたことを通知
   }
@@ -396,10 +396,10 @@ int main(void)
     
         //計測輪
         // printf("%d",isSettingWheel);
-        printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
-        printf("%d,%d,%d\r\n",sum_value[0],sum_value[1],sum_value[2]);
+        // printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
+        // printf("%d,%d,%d\r\n",sum_value[0],sum_value[1],sum_value[2]);
         // printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
-        printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
+        // printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
         printf("x':%.4f,y':%.4f,theta_local':%.4f,\r\n",x, y, theta_local);
     
         printf("\r\n"); //シリアルプロッタ表示
