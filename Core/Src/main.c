@@ -397,9 +397,10 @@ int main(void)
         //計測輪
         // printf("%d",isSettingWheel);
         printf("1:%d,2:%d,3:%d\r\n",value[0],value[1],value[2]);
-        printf("%d,%d,%d",sum_value[0],sum_value[1],sum_value[2]);
+        printf("%d,%d,%d\r\n",sum_value[0],sum_value[1],sum_value[2]);
         // printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
-        // printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
+        printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
+        printf("x':%.4f,y':%.4f,theta_local':%.4f,\r\n",x, y, theta_local);
     
         printf("\r\n"); //シリアルプロッタ表示
       }
