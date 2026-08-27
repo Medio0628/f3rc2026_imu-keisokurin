@@ -49,8 +49,8 @@
 #define START_POS_Y (500.0f / 2.0f)
 #define START_THETA M_PI
 
-// 機体の機構パラメータ (実測値をmm単位等で設定)
-const float L = 69.764f; // ロボットの中心線（真ん中の縦軸）から、縦向きホイールがどれだけズレているか
+// 機体の機構パラメータ (実測値をmm単位等で設定。CADデータの原点を仮想的な機体中心とした)
+const float L = 15.80f; // y軸方向を向く輪のx軸からの距離
 
 #define AVG_WINDOW_SIZE 25
 /* USER CODE END PM */
@@ -279,7 +279,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
 
       dwl = gyro_z * CONV;
-      dxl = (deg3 - deg2) * R / 2.0f;
+      dxl = (deg3 + deg2) * R / 2.0f;
       dyl = deg1 * R - (L * dwl); // Y輪の回転干渉をキャンセル
         
       // 移動平均を計算（計算負荷は非常に低い）
