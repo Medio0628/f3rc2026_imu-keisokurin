@@ -42,10 +42,12 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define CAN_ID_MACRO_kaetekudasai 0x7FE // example CAN ID macro for testing
 #define R 30.0//mm  //radious of wheel
 #define CONV M_PI / 180.0f // 度/秒 を ラジアン/秒 に変換する時に掛ける
 #define PPR 2000.0 //pulses per revolution
+#define START_POS_X (2000.0f+ 500.0f / 2.0f)
+#define START_POS_Y (500.0f / 2.0f)
+#define START_THETA M_PI
 
 // 機体の機構パラメータ (実測値をmm単位等で設定)
 const float L = 69.764f; // ロボットの中心線（真ん中の縦軸）から、縦向きホイールがどれだけズレているか
@@ -115,10 +117,12 @@ volatile double filtered_vx; // 移動平均フィルタ処理後の X軸方向�
 volatile double filtered_vy; // 移動平均フィルタ処理後の Y軸方向（左右方向）の移動速度
 volatile double filtered_omega; // 移動平均フィルタ処理後の 旋回（回転）角速度
 
-// ロボットの絶対座標
-volatile float x = 0.0f;
-volatile float y = 0.0f;
-volatile float theta = 0.0f;
+// ロボットのグローバル座標
+volatile float x = START_POS_X;
+volatile float y = START_POS_Y;
+
+volatile float theta_global = START_THETA;
+volatile float theta_local = 0.0f;
 
 //共通の変数
 float dt = 0.001f; // 制御・積分計算のサンプリング周期
@@ -231,65 +235,68 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割り込み
 	if (&htim6 == htim) { // 1000Hz
     if (isSettingBias == 0){ //IMUがON、バイアス算出済みのとき
-        uint8_t buffer[12];
-        for (int i=0; i<3; i++){
-          LSM6_ReadMulti(0x22, buffer, 12, i+1); // IMU:一括読み出し
-          imu[i].gx = ((int16_t)(buffer[1] << 8 | buffer[0]));
-          imu[i].gy = ((int16_t)(buffer[3] << 8 | buffer[2]));
-          imu[i].gz = ((int16_t)(buffer[5] << 8 | buffer[4]));
-          imu[i].ax = ((int16_t)(buffer[7] << 8 | buffer[6]));
-          imu[i].ay = ((int16_t)(buffer[9] << 8 | buffer[8]));
-          imu[i].az = ((int16_t)(buffer[11] << 8 | buffer[10]));
-        }
+      uint8_t buffer[12];
+      for (int i=0; i<3; i++){
+        LSM6_ReadMulti(0x22, buffer, 12, i+1); // IMU:一括読み出し
+        imu[i].gx = ((int16_t)(buffer[1] << 8 | buffer[0]));
+        imu[i].gy = ((int16_t)(buffer[3] << 8 | buffer[2]));
+        imu[i].gz = ((int16_t)(buffer[5] << 8 | buffer[4]));
+        imu[i].ax = ((int16_t)(buffer[7] << 8 | buffer[6]));
+        imu[i].ay = ((int16_t)(buffer[9] << 8 | buffer[8]));
+        imu[i].az = ((int16_t)(buffer[11] << 8 | buffer[10]));
+      }
 
-        // 軸まわりの角速度
-        gyro_x = (float)(-imu[1].gy + imu[0].gy*sin_30 - imu[0].gx*cos_30 + imu[2].gx*cos_30 + imu[2].gy*sin_30)*G_sensitivity/3.0f - gyro_x_bias;
-        gyro_y = (float)( imu[1].gx - imu[0].gy*cos_30 - imu[0].gx*sin_30 - imu[2].gx*sin_30 + imu[2].gy*cos_30)*G_sensitivity/3.0f - gyro_y_bias;
-        gyro_z = (float)( imu[0].gz + imu[1].gz + imu[2].gz )*G_sensitivity/3.0f - gyro_z_bias;
-        gyro_z = gyro_z * GYRO_Z_SCALE; // 微小なスケール誤差補正
+      // 軸まわりの角速度
+      gyro_x = (float)(-imu[1].gy + imu[0].gy*sin_30 - imu[0].gx*cos_30 + imu[2].gx*cos_30 + imu[2].gy*sin_30)*G_sensitivity/3.0f - gyro_x_bias;
+      gyro_y = (float)( imu[1].gx - imu[0].gy*cos_30 - imu[0].gx*sin_30 - imu[2].gx*sin_30 + imu[2].gy*cos_30)*G_sensitivity/3.0f - gyro_y_bias;
+      gyro_z = (float)( imu[0].gz + imu[1].gz + imu[2].gz )*G_sensitivity/3.0f - gyro_z_bias;
+      gyro_z = gyro_z * GYRO_Z_SCALE; // 微小なスケール誤差補正
 
-        accel_x = (float)(-imu[1].ay + imu[0].ay*sin_30 - imu[0].ax*cos_30 + imu[2].ax*cos_30 + imu[2].ay*sin_30)*A_sensitivity/3.0f;
-        accel_y = (float)( imu[1].ax - imu[0].ay*cos_30 - imu[0].ax*sin_30 - imu[2].ax*sin_30 + imu[2].ay*cos_30)*A_sensitivity/3.0f;
-        accel_z = (float)( imu[0].az + imu[1].az + imu[2].az )*A_sensitivity/3.0f;
+      accel_x = (float)(-imu[1].ay + imu[0].ay*sin_30 - imu[0].ax*cos_30 + imu[2].ax*cos_30 + imu[2].ay*sin_30)*A_sensitivity/3.0f;
+      accel_y = (float)( imu[1].ax - imu[0].ay*cos_30 - imu[0].ax*sin_30 - imu[2].ax*sin_30 + imu[2].ay*cos_30)*A_sensitivity/3.0f;
+      accel_z = (float)( imu[0].az + imu[1].az + imu[2].az )*A_sensitivity/3.0f;
 
-        // 微小なノイズを0とみなす, fabs:絶対値
-        if (fabs(gyro_x) < 0.5) gyro_x = 0.0;
-        if (fabs(gyro_y) < 0.5) gyro_y = 0.0;
-        if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
+      // 微小なノイズを0とみなす, fabs:絶対値
+      if (fabs(gyro_x) < 0.5) gyro_x = 0.0;
+      if (fabs(gyro_y) < 0.5) gyro_y = 0.0;
+      if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
 
-        MadgwickAHRSupdateIMU(gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z, dt);
+      MadgwickAHRSupdateIMU(gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z, dt);
     }
 
     if (isSettingWheel == 0) { // 計測輪有効のとき
-        value[0] = read_encoder_value(1);
-        value[1] = read_encoder_value(2);
-        value[2] = read_encoder_value(3);
+      value[0] = read_encoder_value(1);
+      value[1] = read_encoder_value(2);
+      value[2] = read_encoder_value(3);
 
-        sum_value[0] += value[0];
-        sum_value[1] += value[1];
-        sum_value[2] += value[2];
+      sum_value[0] += value[0];
+      sum_value[1] += value[1];
+      sum_value[2] += value[2];
 
-        // 計測輪の設定上4で割るっぽい
-        deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-        deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-        deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+      // 計測輪の設定上4で割るっぽい
+      deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+      deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+      deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
 
-        dwl = gyro_z * CONV;
-        dxl = (deg1 - deg2) * R / 2.0f;
-        dyl = deg3 * R - (L * dwl); // Y輪の回転干渉をキャンセル
+      dwl = gyro_z * CONV;
+      dxl = (deg1 - deg2) * R / 2.0f;
+      dyl = deg3 * R - (L * dwl); // Y輪の回転干渉をキャンセル
         
-        // 移動平均を計算（計算負荷は非常に低い）
-        filtered_vx = update_ma_isr(&avg_x, dxl);
-        filtered_vy = update_ma_isr(&avg_y, dyl);
-        filtered_omega = update_ma_isr(&avg_omega, dwl);
+      // 移動平均を計算（計算負荷は非常に低い）
+      filtered_vx = update_ma_isr(&avg_x, dxl);
+      filtered_vy = update_ma_isr(&avg_y, dyl);
+      filtered_omega = update_ma_isr(&avg_omega, dwl);
 
-        if (isSettingBias == 0) {
-          theta = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
-        }else{
-          theta += filtered_omega * dt;
-        }
-        x += (filtered_vx * cos(theta) - filtered_vy * sin(theta)) * dt;
-        y += (filtered_vx * sin(theta) + filtered_vy * cos(theta)) * dt;
+      if (isSettingBias == 0) {
+        theta_local = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
+      }else{
+        theta_local += filtered_omega * dt;
+      }
+
+      theta_global = theta_local + START_THETA;
+
+      x += (filtered_vx * cosf(theta_global) - filtered_vy * sinf(theta_global)) * dt;
+      y += (filtered_vx * sinf(theta_global) + filtered_vy * cosf(theta_global)) * dt;
     }
     flag_1ms_update = 1; // 1msが経過し無事割り込み処理ができたことを通知
   }
@@ -372,7 +379,7 @@ int main(void)
     if (flag_1ms_update == 1){
       flag_1ms_update = 0;
 
-      float txdata_f[3] = {x, y, theta};
+      float txdata_f[3] = {x, y, theta_local};
       uint8_t txdata2_u8[12] = {0};
       float_to_u8(txdata_f, txdata2_u8, 3);
       CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_12, txdata2_u8, &hfdcan1, &TxHeader);
@@ -1052,9 +1059,10 @@ void resetWheel(){
   init_averages(&avg_x);
   init_averages(&avg_y);
   init_averages(&avg_omega);
-  x = 0.0f;
-  y = 0.0f;
-  theta = 0.0f;
+  x = START_POS_X;
+  y = START_POS_Y;
+  theta_local = 0.0f;
+  theta_global = START_THETA;
   sum_value[0] = 0;
   sum_value[1] = 0;
   sum_value[2] = 0;
