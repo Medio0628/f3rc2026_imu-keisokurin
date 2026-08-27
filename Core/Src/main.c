@@ -114,7 +114,11 @@ volatile double dwl; // 旋回（回転）角速度
 volatile double filtered_vx; // 移動平均フィルタ処理後の X軸方向（前後方向）の移動速度
 volatile double filtered_vy; // 移動平均フィルタ処理後の Y軸方向（左右方向）の移動速度
 volatile double filtered_omega; // 移動平均フィルタ処理後の 旋回（回転）角速度
-volatile double theta;
+
+// ロボットの絶対座標
+volatile float x = 0.0f;
+volatile float y = 0.0f;
+volatile float theta = 0.0f;
 
 //共通の変数
 float dt = 0.001f; // 制御・積分計算のサンプリング周期
@@ -164,6 +168,7 @@ typedef struct {
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+volatile float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 static MovingAvgData avg_x, avg_y, avg_omega;
 TIM_TypeDef* const TIM[3] = {TIM2, TIM8, TIM1}; // エンコーダ入力として使用している3つのタイマー（TIM）のハードウェアレジスタアドレスをまとめたポインタ配列
 
@@ -251,6 +256,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
         if (fabs(gyro_x) < 0.5) gyro_x = 0.0;
         if (fabs(gyro_y) < 0.5) gyro_y = 0.0;
         if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
+
+        MadgwickAHRSupdateIMU(gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z, dt);
     }
 
     if (isSettingWheel == 0) { // 計測輪有効のとき
@@ -261,13 +268,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
         sum_value[0] += value[0];
         sum_value[1] += value[1];
         sum_value[2] += value[2];
-    
-        // // こっちが間違ってる理由がまだ飲み込めてない
-        // deg1 = (((float)value[0] / PPR) * 2 * M_PI) / dt; //各計測輪の角速度
-        // deg2 = (((float)value[1] / PPR) * 2 * M_PI) / dt;
-        // deg3 = (((float)value[2] / PPR) * 2 * M_PI) / dt;
 
-        // こっちが正しい
+        // 計測輪の設定上4で割るっぽい
         deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
         deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
         deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
@@ -281,8 +283,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
         filtered_vy = update_ma_isr(&avg_y, dyl);
         filtered_omega = update_ma_isr(&avg_omega, dwl);
 
-        // 角度の積分計算
-        theta += filtered_omega * dt;
+        if (isSettingBias == 0) {
+          theta = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
+        }else{
+          theta += filtered_omega * dt;
+        }
+        x += (filtered_vx * cos(theta) - filtered_vy * sin(theta)) * dt;
+        y += (filtered_vx * sin(theta) + filtered_vy * cos(theta)) * dt;
     }
     flag_1ms_update = 1; // 1msが経過し無事割り込み処理ができたことを通知
   }
@@ -365,10 +372,10 @@ int main(void)
     if (flag_1ms_update == 1){
       flag_1ms_update = 0;
 
-      float txdata_f[4] = {filtered_vx, filtered_vy, filtered_omega, theta};
-      uint8_t txdata2_u8[16] = {0};
-      float_to_u8(txdata_f, txdata2_u8, 4);
-      CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_16, txdata2_u8, &hfdcan1, &TxHeader);
+      float txdata_f[3] = {x, y, theta};
+      uint8_t txdata2_u8[12] = {0};
+      float_to_u8(txdata_f, txdata2_u8, 3);
+      CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_12, txdata2_u8, &hfdcan1, &TxHeader);
 
       //以下デバッグ用
       print_counter++;
@@ -957,6 +964,58 @@ float invSqrt(float x){
   return 1.0f / sqrtf(x);
 }
 
+void MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, float az, float dt){
+  float recipNorm;
+  float s0, s1, s2, s3;
+  float qDot1, qDot2, qDot3, qDot4;
+  float _2q0, _2q1, _2q2, _2q3, _4q0, _4q1, _4q2, _8q1, _8q2, q0q0, q1q1, q2q2, q3q3;
+
+  // 度/秒 を ラジアン/秒 に変換
+  gx *= CONV;
+  gy *= CONV;
+  gz *= CONV;
+
+  // ジャイロによるクォータニオンの変化率
+  qDot1 = 0.5f * (-q[1] * gx - q[2] * gy - q[3] * gz);
+  qDot2 = 0.5f * (q[0] * gx + q[2] * gz - q[3] * gy);
+  qDot3 = 0.5f * (q[0] * gy - q[1] * gz + q[3] * gx);
+  qDot4 = 0.5f * (q[0] * gz + q[1] * gy - q[2] * gx);
+
+  // 加速度が有効な場合のみ補正計算を行う
+  if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
+    recipNorm = invSqrt(ax * ax + ay * ay + az * az);
+    ax *= recipNorm; ay *= recipNorm; az *= recipNorm;
+
+    // 勾配降下法の計算
+    _2q0 = 2.0f * q[0]; _2q1 = 2.0f * q[1]; _2q2 = 2.0f * q[2]; _2q3 = 2.0f * q[3];
+    _4q0 = 4.0f * q[0]; _4q1 = 4.0f * q[1]; _4q2 = 4.0f * q[2];
+    _8q1 = 8.0f * q[1]; _8q2 = 8.0f * q[2];
+    q0q0 = q[0] * q[0]; q1q1 = q[1] * q[1]; q2q2 = q[2] * q[2]; q3q3 = q[3] * q[3];
+
+    s0 = _4q0 * q2q2 + _2q2 * ax + _4q0 * q1q1 - _2q1 * ay;
+    s1 = _4q1 * q3q3 - _2q3 * ax + 4.0f * q0q0 * q[1] - _2q0 * ay - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az;
+    s2 = 4.0f * q0q0 * q[2] + _2q0 * ax + _4q2 * q3q3 - _2q3 * ay - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az;
+    s3 = 4.0f * q1q1 * q[3] - _2q1 * ax + 4.0f * q2q2 * q[3] - _2q2 * ay;
+
+    recipNorm = invSqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+    s0 *= recipNorm; s1 *= recipNorm; s2 *= recipNorm; s3 *= recipNorm;
+
+    qDot1 -= beta * s0; qDot2 -= beta * s1; qDot3 -= beta * s2; qDot4 -= beta * s3;
+  }
+
+  // 積分してクォータニオンを更新
+  q[0] += qDot1 * dt; q[1] += qDot2 * dt; q[2] += qDot3 * dt; q[3] += qDot4 * dt;
+  recipNorm = invSqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+  q[0] *= recipNorm; q[1] *= recipNorm; q[2] *= recipNorm; q[3] *= recipNorm;
+}
+
+// デバック用
+void getEulerAngles(){
+  roll  = atan2f(2.0f * (q[0] * q[1] + q[2] * q[3]), 1.0f - 2.0f * (q[1] * q[1] + q[2] * q[2])) * 57.29578f;
+  pitch = asinf(2.0f * (q[0] * q[2] - q[3] * q[1])) * 57.29578f;
+  yaw   = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3])) * 57.29578f;
+}
+
 void resetBias(){
   // 起動時に1000回計測して平均をとる
   isSettingBias = 1;
@@ -993,7 +1052,9 @@ void resetWheel(){
   init_averages(&avg_x);
   init_averages(&avg_y);
   init_averages(&avg_omega);
-  theta = 0.0;
+  x = 0.0f;
+  y = 0.0f;
+  theta = 0.0f;
   sum_value[0] = 0;
   sum_value[1] = 0;
   sum_value[2] = 0;
