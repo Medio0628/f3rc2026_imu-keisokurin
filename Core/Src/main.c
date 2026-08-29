@@ -263,7 +263,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
 
       MadgwickAHRSupdateIMU(gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z, dt);
-      yaw = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
+
+      // バイアス計算中はyawに最低値を代入する
+      yaw = isSettingBias ? -32768 : atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
     }
 
     if (isSettingWheel == 0) { // 計測輪有効のとき
@@ -380,12 +382,6 @@ int main(void)
   {
     if (flag_1ms_update == 1){
       flag_1ms_update = 0;
-
-      // int16_t txdata_i16[3] = {
-      //   (int16_t)x,
-      //   (int16_t)y,
-      //   (int16_t)(theta_local * 1000.0f),
-      // };
 
       int16_t txdata_i16[4] = {
         (int16_t)(yaw * 1000.0f),
