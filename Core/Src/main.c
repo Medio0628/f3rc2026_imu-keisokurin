@@ -102,28 +102,6 @@ const uint16_t IMU_CS_PINS[3]       = {IMU1_CS_Pin, IMU2_CS_Pin, IMU3_CS_Pin}; /
 volatile int16_t value[3]; // 1ms（前回からの間隔）の間に各エンコーダがカウントしたパルス数（変位量）
 volatile int16_t sum_value[3]; // プログラム起動（またはリセット）からの全累積パルス数（総回転量）
 
-// 各計測輪が1秒間にどれくらい回転しているかを表す角速度
-volatile double deg1 = 0.0f; //[rad]
-volatile double deg2 = 0.0f; //[rad]
-volatile double deg3 = 0.0f; //[rad]
-
-// ロボット自身から見た（ローカル座標系における）現在速度。
-volatile double dxl; // 前後方向の移動速度
-volatile double dyl; // 左右方向の移動速度
-volatile double dwl; // 旋回（回転）角速度
-
-// ノイズ除去（移動平均フィルタ）を適用した後の、ロボットの移動速度および旋回速度を保持する変数群
-volatile double filtered_vx; // 移動平均フィルタ処理後の X軸方向（前後方向）の移動速度
-volatile double filtered_vy; // 移動平均フィルタ処理後の Y軸方向（左右方向）の移動速度
-volatile double filtered_omega; // 移動平均フィルタ処理後の 旋回（回転）角速度
-
-// ロボットのグローバル座標
-volatile float x = START_POS_X;
-volatile float y = START_POS_Y;
-
-volatile float theta_global = START_THETA;
-volatile float theta_local = 0.0f;
-
 //共通の変数
 float dt = 0.001f; // 制御・積分計算のサンプリング周期
 uint32_t last_time = 0; // 前回処理を実行した時刻（ミリ秒単位のタイムスタンプ）を記録するための変数
@@ -272,35 +250,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       value[0] = read_encoder_value(1);
       value[1] = read_encoder_value(2);
       value[2] = read_encoder_value(3);
-
-      // sum_value[0] += value[0];
-      // sum_value[1] += value[1];
-      // sum_value[2] += value[2];
-
-      // // 計測輪の設定上4で割るっぽい
-      // deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-      // deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-      // deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-
-      // dwl = gyro_z * CONV;
-      // dxl = (deg3 + deg2) * R / 2.0f;
-      // dyl = deg1 * R - (L * dwl); // Y輪の回転干渉をキャンセル
-        
-      // // 移動平均を計算（計算負荷は非常に低い）
-      // filtered_vx = update_ma_isr(&avg_x, dxl);
-      // filtered_vy = update_ma_isr(&avg_y, dyl);
-      // filtered_omega = update_ma_isr(&avg_omega, dwl);
-
-      // if (isSettingBias == 0) {
-      //   theta_local = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
-      // }else{
-      //   theta_local += filtered_omega * dt;
-      // }
-
-      // theta_global = theta_local + START_THETA;
-
-      // x += (filtered_vx * cosf(theta_global) - filtered_vy * sinf(theta_global)) * dt;
-      // y += (filtered_vx * sinf(theta_global) - filtered_vy * cosf(theta_global)) * dt;
     }
     flag_1ms_update = 1; // 1msが経過し無事割り込み処理ができたことを通知
   }
@@ -1069,10 +1018,6 @@ void resetWheel(){
   init_averages(&avg_x);
   init_averages(&avg_y);
   init_averages(&avg_omega);
-  x = START_POS_X;
-  y = START_POS_Y;
-  theta_local = 0.0f;
-  theta_global = START_THETA;
   sum_value[0] = 0;
   sum_value[1] = 0;
   sum_value[2] = 0;
