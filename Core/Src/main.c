@@ -99,8 +99,8 @@ GPIO_TypeDef* const IMU_CS_PORTS[3] = {IMU1_CS_GPIO_Port, IMU2_CS_GPIO_Port, IMU
 const uint16_t IMU_CS_PINS[3]       = {IMU1_CS_Pin, IMU2_CS_Pin, IMU3_CS_Pin}; // CSピンの ピン番号を格納
 
 //計測輪制御の変数
-volatile int value[3]; // 1ms（前回からの間隔）の間に各エンコーダがカウントしたパルス数（変位量）
-volatile int sum_value[3]; // プログラム起動（またはリセット）からの全累積パルス数（総回転量）
+volatile int16_t value[3]; // 1ms（前回からの間隔）の間に各エンコーダがカウントしたパルス数（変位量）
+volatile int16_t sum_value[3]; // プログラム起動（またはリセット）からの全累積パルス数（総回転量）
 
 // 各計測輪が1秒間にどれくらい回転しているかを表す角速度
 volatile double deg1 = 0.0f; //[rad]
@@ -263,6 +263,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       if (fabs(gyro_z) < 0.5) gyro_z = 0.0;
 
       MadgwickAHRSupdateIMU(gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z, dt);
+      yaw = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
     }
 
     if (isSettingWheel == 0) { // 計測輪有効のとき
@@ -270,34 +271,34 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){ //タイマー割�
       value[1] = read_encoder_value(2);
       value[2] = read_encoder_value(3);
 
-      sum_value[0] += value[0];
-      sum_value[1] += value[1];
-      sum_value[2] += value[2];
+      // sum_value[0] += value[0];
+      // sum_value[1] += value[1];
+      // sum_value[2] += value[2];
 
-      // 計測輪の設定上4で割るっぽい
-      deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-      deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
-      deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+      // // 計測輪の設定上4で割るっぽい
+      // deg1 = (((float)value[0] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+      // deg2 = (((float)value[1] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
+      // deg3 = (((float)value[2] / (PPR * 4.0f)) * 2.0f * M_PI) / dt;
 
-      dwl = gyro_z * CONV;
-      dxl = (deg3 + deg2) * R / 2.0f;
-      dyl = deg1 * R - (L * dwl); // Y輪の回転干渉をキャンセル
+      // dwl = gyro_z * CONV;
+      // dxl = (deg3 + deg2) * R / 2.0f;
+      // dyl = deg1 * R - (L * dwl); // Y輪の回転干渉をキャンセル
         
-      // 移動平均を計算（計算負荷は非常に低い）
-      filtered_vx = update_ma_isr(&avg_x, dxl);
-      filtered_vy = update_ma_isr(&avg_y, dyl);
-      filtered_omega = update_ma_isr(&avg_omega, dwl);
+      // // 移動平均を計算（計算負荷は非常に低い）
+      // filtered_vx = update_ma_isr(&avg_x, dxl);
+      // filtered_vy = update_ma_isr(&avg_y, dyl);
+      // filtered_omega = update_ma_isr(&avg_omega, dwl);
 
-      if (isSettingBias == 0) {
-        theta_local = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
-      }else{
-        theta_local += filtered_omega * dt;
-      }
+      // if (isSettingBias == 0) {
+      //   theta_local = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
+      // }else{
+      //   theta_local += filtered_omega * dt;
+      // }
 
-      theta_global = theta_local + START_THETA;
+      // theta_global = theta_local + START_THETA;
 
-      x += (filtered_vx * cosf(theta_global) - filtered_vy * sinf(theta_global)) * dt;
-      y += (filtered_vx * sinf(theta_global) - filtered_vy * cosf(theta_global)) * dt;
+      // x += (filtered_vx * cosf(theta_global) - filtered_vy * sinf(theta_global)) * dt;
+      // y += (filtered_vx * sinf(theta_global) - filtered_vy * cosf(theta_global)) * dt;
     }
     flag_1ms_update = 1; // 1msが経過し無事割り込み処理ができたことを通知
   }
@@ -380,15 +381,22 @@ int main(void)
     if (flag_1ms_update == 1){
       flag_1ms_update = 0;
 
-      int16_t txdata_i16[3] = {
-        (int16_t)x,
-        (int16_t)y,
-        (int16_t)(theta_local * 1000.0f),
+      // int16_t txdata_i16[3] = {
+      //   (int16_t)x,
+      //   (int16_t)y,
+      //   (int16_t)(theta_local * 1000.0f),
+      // };
+
+      int16_t txdata_i16[4] = {
+        (int16_t)(yaw * 1000.0f),
+        (int16_t)value[0],
+        (int16_t)value[1],
+        (int16_t)value[2]
       };
 
       uint8_t txdata_u8[8] = {0}; // 8バイトで初期化
 
-      int16_to_u8(txdata_i16, txdata_u8, 3);
+      int16_to_u8(txdata_i16, txdata_u8, 4);
       CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_8, txdata_u8, &hfdcan1, &TxHeader);
 
       //以下デバッグ用
@@ -407,7 +415,7 @@ int main(void)
         // printf("%d,%d,%d\r\n",sum_value[0],sum_value[1],sum_value[2]);
         // printf("vx:%.4f,vy:%.4f,vz:%.4f,\r\n",dxl,dyl,dwl);
         // printf("vx':%.4f,vy':%.4f,vz':%.4f,\r\n",filtered_vx,filtered_vy,filtered_omega);
-        printf("x':%.4f,y':%.4f,theta_local':%.4f,\r\n",x, y, theta_local);
+        // printf("x':%.4f,y':%.4f,theta_local':%.4f,\r\n",x, y, theta_local);
     
         printf("\r\n"); //シリアルプロッタ表示
       }
