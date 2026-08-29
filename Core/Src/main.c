@@ -150,7 +150,8 @@ HAL_StatusTypeDef CAN_SEND(uint32_t CANID, uint32_t DataLength, uint8_t *txdata,
 void u8_to_int(uint8_t *req, int32_t *des, uint32_t uint8_len);
 void u8_to_float(uint8_t *req, float *des, uint32_t uint8_len);
 void float_to_u8(float *req, uint8_t *des, uint32_t float_len);
-void int_to_u8(int32_t *req, uint8_t *des, uint32_t int_len);
+void int16_to_u8(int16_t *req, uint8_t *des, uint32_t int_len);
+void int32_to_u8(int32_t *req, uint8_t *des, uint32_t int_len);
 
 void LSM6_Write(uint8_t reg, uint8_t data, int port);
 void LSM6_ReadMulti(uint8_t reg, uint8_t* pData, uint16_t size, int port);
@@ -379,10 +380,16 @@ int main(void)
     if (flag_1ms_update == 1){
       flag_1ms_update = 0;
 
-      float txdata_f[3] = {x, y, theta_local};
-      uint8_t txdata2_u8[12] = {0};
-      float_to_u8(txdata_f, txdata2_u8, 3);
-      CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_12, txdata2_u8, &hfdcan1, &TxHeader);
+      int16_t txdata_i16[3] = {
+        (int16_t)x,
+        (int16_t)y,
+        (int16_t)(theta_local * 1000.0f),
+      };
+
+      uint8_t txdata_u8[8] = {0}; // 8バイトで初期化
+
+      int16_to_u8(txdata_i16, txdata_u8, 3);
+      CAN_SEND(CAN_ID_FEEDBACK, FDCAN_DLC_BYTES_8, txdata_u8, &hfdcan1, &TxHeader);
 
       //以下デバッグ用
       print_counter++;
@@ -1109,7 +1116,17 @@ void float_to_u8(float *req, uint8_t *des, uint32_t float_len)
   }
 }
 
-void int_to_u8(int32_t *req, uint8_t *des, uint32_t int_len)
+void int16_to_u8(int16_t *req, uint8_t *des, uint32_t int_len)
+{
+  for (uint32_t i = 0; i < int_len; i++)
+  {
+    uint16_t val = (uint16_t)req[i];
+    des[i * 2]     = (uint8_t)((val >> 8) & 0xFF); // 上位バイト
+    des[i * 2 + 1] = (uint8_t)(val & 0xFF);        // 下位バイト
+  }
+}
+
+void int32_to_u8(int32_t *req, uint8_t *des, uint32_t int_len)
 {
   for (int i = 0; i < int_len; i++)
   {
